@@ -15,7 +15,9 @@ export const NdefRecordType = {
 
 
 let _registeredToEvents = false;
+let _registeredToStatusEvents = false;
 const _listeners = [];
+const _statusListeners = [];
 const _commandListeners = [];
 
 let _registerToEvents = () => {
@@ -26,10 +28,25 @@ let _registerToEvents = () => {
     }
 };
 
+let _registerToStatusEvents = () => {
+    if(!_registeredToStatusEvents){
+        DeviceEventEmitter.addListener('__NFC_STATUS_CHANGED', _notifyStatusListeners);
+        _registeredToStatusEvents = true;
+    }
+};
+
 let _notifyListeners = (data) => {
     if(data){
         for(let i in _listeners){
             _listeners[i](data);
+        }
+    }
+};
+
+let _notifyStatusListeners = (data) => {
+    if(data){
+        for(let i in _statusListeners){
+            _statusListeners[i](data);
         }
     }
 };
@@ -50,6 +67,18 @@ NFC.addListener = (callback) => {
     }
     _listeners.push(callback);
     _registerToEvents();
+};
+
+NFC.addStatusListener = (callback) => {
+    if (Platform.OS === 'ios') {
+        return;
+    }
+    _statusListeners.push(callback);
+    _registerToStatusEvents();
+};
+
+NFC.removeStatusListeners = () => {
+    _statusListeners = [];
 };
 
 NFC.removeAllListeners = () => {
@@ -83,6 +112,10 @@ NFC.readSignature = (callback) => {
 
 NFC.isTagAvailable = (callback) => {
     NativeModules.ReactNativeNFC.isTagAvailable(callback);
+}
+
+NFC.isEnabled = (callback) => {
+    NativeModules.ReactNativeNFC.isEnabled(callback);
 }
 
 

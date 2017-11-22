@@ -3,7 +3,10 @@ package com.novadart.reactnativenfc;
 
 import android.app.Activity;
 import android.app.PendingIntent;
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.nfc.NdefMessage;
 import android.nfc.NfcAdapter;
 import android.nfc.Tag;
@@ -18,6 +21,7 @@ import android.nfc.tech.TagTechnology;
 import android.util.Log;
 
 import com.facebook.react.bridge.ActivityEventListener;
+import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.Callback;
 import com.facebook.react.bridge.LifecycleEventListener;
 import com.facebook.react.bridge.ReactApplicationContext;
@@ -25,6 +29,7 @@ import com.facebook.react.bridge.ReactContextBaseJavaModule;
 import com.facebook.react.bridge.ReactMethod;
 import com.facebook.react.bridge.ReadableArray;
 import com.facebook.react.bridge.WritableMap;
+import com.facebook.react.modules.core.DeviceEventManagerModule;
 import com.novadart.reactnativenfc.handler.BaseNFCHandler;
 import com.novadart.reactnativenfc.handler.NdefHandler;
 import com.novadart.reactnativenfc.handler.TagHandler;
@@ -38,10 +43,10 @@ import com.novadart.reactnativenfc.task.TagProcessingTask;
 import java.io.IOException;
 import java.util.LinkedList;
 import java.util.List;
-
 public class ReactNativeNFCModule extends ReactContextBaseJavaModule implements ActivityEventListener,LifecycleEventListener {
 
     public static final String EVENT_NFC_DISCOVERED = "__NFC_DISCOVERED";
+    public static final String EVENT_NFC_STATUS_CHANGED = "__NFC_STATUS_CHANGED";
 
     // caches the last message received, to pass it to the listeners when it reconnects
     private WritableMap startupNfcData;
@@ -57,6 +62,28 @@ public class ReactNativeNFCModule extends ReactContextBaseJavaModule implements 
     private Callback cb = null;
     private boolean useNfcReaderMode = true;
     private Tag lastTagRead = null;
+    
+    private final BroadcastReceiver mReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            final String action = intent.getAction();
+
+            if (action.equals(NfcAdapter.ACTION_ADAPTER_STATE_CHANGED)) {
+                final int state = intent.getIntExtra(NfcAdapter.EXTRA_ADAPTER_STATE, NfcAdapter.STATE_OFF);
+
+                /*
+                  STATE_OFF => 1
+                  STATE_ON => 3
+                  STATE_TURNING_OFF => 4
+                  STATE_TURNING_ON => 2
+                */
+                WritableMap stateToSend = Arguments.createMap();
+                stateToSend.putInt("state", state);
+
+                getReactApplicationContext().getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class).emit(EVENT_NFC_STATUS_CHANGED, stateToSend);
+            }
+        }
+    };
 
     public ReactNativeNFCModule(ReactApplicationContext reactContext) {
         super(reactContext);
@@ -200,6 +227,9 @@ public class ReactNativeNFCModule extends ReactContextBaseJavaModule implements 
         } else {
             mNfcAdapter = NfcAdapter.getDefaultAdapter(getReactApplicationContext());
         }
+
+        IntentFilter filter = new IntentFilter(NfcAdapter.ACTION_ADAPTER_STATE_CHANGED);
+        getReactApplicationContext().registerReceiver(mReceiver, filter);
     }
 
     @Override
@@ -255,4 +285,15 @@ public class ReactNativeNFCModule extends ReactContextBaseJavaModule implements 
             adapter.disableForegroundDispatch(activity);
         }
     }
+    
+	@ReactMethod
+    public void isEnabled(Callback callback) {
+        NfcAdapter nfcAdapter = NfcAdapter.getDefaultAdapter(getReactApplicationContext());
+        if (nfcAdapter != null) {
+            callback.invoke(nfcAdapter.isEnabled());
+        } else {
+            callback.invoke(false);
+        }
+    }
+
 }
